@@ -127,3 +127,11 @@ transformation:
 
 .. math::
     \Sigma_R = A\Sigma_ZA^T
+
+Likelihood of Moments
+---------------------
+
+We seek to find what true moments, :math:`\vec{Q}` are maximumly likely given
+moments :math:`\vec{R}` measured on a noisy image. We can express this as the
+probability of moments :math:`\vec{Q}` given :math:`\vec{R}`, i.e.
+:math:`P(\vec{Q}|\vec{R})`
