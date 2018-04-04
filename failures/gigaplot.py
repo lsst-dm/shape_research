@@ -1,6 +1,6 @@
 import itertools as it
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatch
+#import matplotlib.pyplot as plt
+#import matplotlib.patches as mpatch
 import numpy as np
 import pickle
 
@@ -59,15 +59,27 @@ radius = []
 shape = []
 positions = []
 
+
+catLen = len(totalCatalog)
 for i, record in enumerate(totalCatalog):
+    if i % 1000 == 0:
+        print("Record {}  out of {}".format(i, catLen))
+
     gausFlux = record[fluxKey]
     if np.isnan(gausFlux):
         continue
+    psfShape = np.array([record['slot_PsfShape_xx'],
+                         record['slot_PsfShape_yy'],
+                         record['slot_PsfShape_xy']])
     quadShape = record[SdssKey]
     if np.isnan(quadShape.getIxx()):
         quadShape = record[HsmKey]
         if np.isnan(quadShape.getIxx()):
             continue
+    intermediateShape = quadShape.getParameterVector() - \
+        psfShape
+    intermediateShape += np.array([4, 4, 0])
+    quadShape = afwGeom.ellipses.Quadrupole(*intermediateShape)
     sep = afwGeom.ellipses.SeparableConformalShearTraceRadius(quadShape)
     rad = sep.getDeterminantRadius()
     if np.isnan(rad):
@@ -103,30 +115,24 @@ totalCatalog.writeFits(totalCatalogPath)
 import numpy as np
 import lsst.afw.table as afwTable
 import matplotlib.pyplot as plt
+import scipy as sp
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.neighbors.kde import KernelDensity
+from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 
-flux = np.load('shape_work/results/gausFlux.npy')
-radius = np.load('shape_work/results/conRad.npy')
-shape = np.load('shape_work/results/conShape.npy')
-positions = np.load('shape_work/results/positions.npy')
-totalCatalogPath = 'shape_work/results/totalCatalog.fits'
+flux = np.load('../shape_work/results/gausFlux.npy')
+radius = np.load('../shape_work/results/conRad.npy')
+shape = np.load('../shape_work/results/conShape.npy')
+positions = np.load('../shape_work/results/positions.npy')
+totalCatalogPath = '../shape_work/results/totalCatalog.fits'
 totalCatalog = afwTable.SourceCatalog.readFits(totalCatalogPath)
 
 fig = plt.figure()
 
+
 extend = totalCatalog['base_ClassificationExtendedness_value'][positions]
 gal = extend == 1
 star = extend == 0
-
-plt.semilogy(-2.5*np.log10(flux[star])+27, radius[star], '.')
-plt.semilogy(-2.5*np.log10(flux[gal])+27, radius[gal], '.')
-
-plt.semilogy(-2.5*np.log10(flux[star])+27, shape[star], '.')
-plt.semilogy(-2.5*np.log10(flux[gal])+27, shape[gal], '.', alpha=0.5)
-
-plt.loglog(shape[star], radius[star], '.')
-plt.loglog(shape[gal], radius[gal], '.')
 
 good = np.zeros(len(totalCatalog), dtype=bool)
 failed = totalCatalog.schema.extract('*_flag').keys()
@@ -139,15 +145,89 @@ goodTrim = goodFlip[positions]
 
 badTrim = good[positions]
 
-plt.semilogy(-2.5*np.log10(flux[goodTrim])+27, radius[goodTrim], '.')
-plt.semilogy(-2.5*np.log10(flux[badTrim])+27, radius[badTrim], '.')
+starGood = np.bitwise_and(star, goodTrim)
+galGood = np.bitwise_and(gal, goodTrim)
 
-weirdPlace = np.where((radius[badTrim] < 3.3) * (radius[badTrim] > 2.25))
+starBad = np.bitwise_and(star, badTrim)
+galBad = np.bitwise_and(gal, badTrim)
+
+fluxStarGood = flux[starGood]
+bcfluxStar, bcfluxStarLambda = sp.stats.boxcox(fluxStarGood)
+bcRadiusStar, bcRadiusStarLambda = sp.stats.boxcox(radius[starGood])
+bcShapeStar, bcShapeStarLambda = sp.stats.boxcox(shape[starGood])
+
+starGausMix = BayesianGaussianMixture(4)
+indDataStar = np.vstack([bcfluxStar, bcRadiusStar, bcShapeStar]).transpose()
+starGausMix.fit(indDataStar)
+
+fluxGalGood = flux[galGood]
+bcfluxGal, bcfluxGalLambda = sp.stats.boxcox(fluxGalGood)
+bcRadiusGal, bcRadiusGalLambda = sp.stats.boxcox(radius[galGood])
+bcShapeGal, bcShapeGalLambda = sp.stats.boxcox(shape[galGood])
+
+
+indDataGal = np.vstack([bcfluxGal, bcRadiusGal, bcShapeGal]).transpose()
+H, edges = np.histogramdd(indDataGal, bins=30)
+fluxEdges = edges[0]
+radiusEdges = edges[1]
+shapeEdges = edges[2]
+fluxMid = edges[0][:-1] + (edges[0][1]-edges[0][0])
+radiusMid = edges[1][:-1] + (edges[1][1]-edges[1][0])
+shapeMid = edges[2][:-1] + (edges[2][1]-edges[2][0])
+
+binsToDrop = np.where(np.bitwise_and(H<25,H>0))
+fluxBinsBad = binsToDrop[0]
+radiusBinsBad = binsToDrop[1]
+shapeBinsBad = binsToDrop[2]
+dropMask = np.ones(len(fluxGalGood),dtype=bool)
+for i in range(len(fluxGalGood)):
+    if i % 1000 == 0:
+        print(i/len(fluxGalGood))
+    for j in range(len(binsToDrop[0])):
+        fTest = bcfluxGal[i] >= fluxEdges[fluxBinsBad[j]] and bcfluxGal[i] < fluxEdges[fluxBinsBad[j]+1]
+        rTest = bcRadiusGal[i] >= radiusEdges[radiusBinsBad[j]] and bcRadiusGal[i] < radiusEdges[radiusBinsBad[j]+1]
+        sTest = bcShapeGal[i] >= shapeEdges[shapeBinsBad[j]] and bcShapeGal[i] < shapeEdges[shapeBinsBad[j]+1]
+        if fTest and rTest and sTest:
+            dropMask[i] = False
+            break
+
+H, edges = np.histogramdd(np.vstack([bcfluxGal[dropMask], bcRadiusGal[dropMask], bcShapeGal[dropMask]]).transpose(),bins=30)
+fluxind, radind, shapeind = np.indices(H.shape)
+nonzero = np.where(H != 0)
+
+fig = plt.figure()
+ax = fig.add_subplot(111,projection='3d')
+ax.scatter(fluxind[nonzero], radind[nonzero], shapeind[nonzero], c=H[nonzero]/np.sum(H))
+
+galGausMix = GaussianMixture(5, covariance_type='full')
+indDataGal = np.vstack([bcfluxGal[dropMask], bcRadiusGal[dropMask], bcShapeGal[dropMask]]).transpose()
+orDataGal = np.vstack([fluxGalGood, radius[galGood], shape[galGood]]).transpose()
+galGausMix.fit(indDataGal)
+samples = galGausMix.score_samples(indDataGal)
+
+S, edges, extra = sp.stats.binned_statistic_dd(np.vstack([bcfluxGal[dropMask], bcRadiusGal[dropMask], bcShapeGal[dropMask]]).transpose(),
+                                        samples, bins=30)
+nonzeroS = np.where(S != 0)
+fig = plt.figure()
+ax = fig.add_subplot(111,projection='3d')
+ax.scatter(fluxind[nonzeroS], radind[nonzeroS], shapeind[nonzeroS], c=S[nonzeroS])
+
+
+magsStarGood = -2.5*np.log10(flux[starGood])+27
+magsStarBad = -2.5*np.log10(flux[starBad])+27
+
+plt.semilogy(magsStarGood, radius[starGood], '.')
+plt.semilogy(magsStarBad, radius[starBad], '.')
+
+plt.loglog(radius[starGood], shape[starGood], '.')
+plt.loglog(radius[starBad], shape[starBad], '.')
+
+plt.loglog(radius[galGood], shape[galGood], '.')
+plt.loglog(radius[galBad], shape[galBad], '.')
 
 plt.figure()
 plt.semilogy(-2.5*np.log10(flux[goodTrim])+27, shape[goodTrim], '.')
 plt.semilogy(-2.5*np.log10(flux[badTrim])+27, shape[badTrim], '.')
-plt.semilogy(-2.5*np.log10(flux[badTrim][weirdPlace])+27, shape[badTrim][weirdPlace], '.')
 
 plt.figure()
 plt.loglog(radius[goodTrim], shape[goodTrim], '.')

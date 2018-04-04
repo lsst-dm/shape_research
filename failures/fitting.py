@@ -20,6 +20,23 @@ PROCESSES = 4
 
 #np.seterr(all='raise')
 
+def makeHist(output, catalog, number):
+    record = catalog[number]
+    baseHsmKey = afwTable.QuadrupoleKey(catalog.schema["ext_shapeHSM_HsmSourceMoments"])
+    baseSimpleKey = afwTable.QuadrupoleKey(catalog.schema["ext_simpleShape_SimpleShape"])
+    baseSdssKey = afwTable.QuadrupoleKey(catalog.schema["base_SdssShape"])
+    extract = lambda s: [s.getIxx(), s.getIyy(), s.getIxy()]
+    hsmShape = extract(record.get(baseHsmKey))
+    simpleShape = extract(record.get(baseSimpleKey))
+    sdssShape = extract(record.get(baseSdssKey))
+    for i in range(3):
+        plt.figure(i)
+        plt.hist(output[3][:, i], bins=50)
+        plt.axvline(hsmShape[i], c='m', label='hsm')
+        plt.axvline(simpleShape[i], c='r', label='simple')
+        plt.axvline(sdssShape[i], c='y', label='sdss')
+        plt.legend()
+
 def printShapes(catalog, number):
     baseHsmKey = "ext_shapeHSM_HsmSourceMoments"
     baseSimpleKey = "ext_simpleShape_SimpleShape"
@@ -126,7 +143,7 @@ def processRecord(record, image, variance, psf, it=ITERATIONS):
     parameters = np.array([psf.getIxx(), psf.getIyy(), psf.getIxy(), peak])
     stepSize = abs(parameters)/10.
 
-    constraints = [[0, 100], [0, 100], [-100, 100], [0, 1000]]
+    constraints = [[0, 20], [0, 20], [-20, 20], [0, 1000]]
 
     output = demczs(it, data, ind, var, fitFunc, chiFunc, boundsFunc,
                     parameters, stepSize, constraints, extra,  16,
