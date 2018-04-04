@@ -11,19 +11,16 @@ vector :math:`[x_i,y_i]`.
 
 
 .. math::
+    R_0 = \sum_i z(r_i)w(r_i)
     :label: zeroth_raw_moment
 
-    R_0 = \sum_i z(r_i)w(r_i)
-
 .. math::
+    R_1 = \sum_i z(r_i)w(r_i)r_i
     :label: first_raw_moment
 
-    R_1 = \sum_i z(r_i)w(r_i)r_i
-
 .. math::
-    :label: second_raw_moment
-
     R_2 = \sum_i z(r_i)W(r_i)r_ir_i^T
+    :label: second_raw_moment
 
 
 Weight Function
@@ -36,6 +33,7 @@ elliptical Gaussian:
     w(r_i) = \frac{e^{-\frac{1}{2}r_i^TC^{-1}_2r_i}}{C_0}
 
     C_0 = \int_{-\infty}^{\infty}e^{-\frac{1}{2}r^TC^{-1}_2r}d^kr
+    :label: weightFunction
 
 Debiasing
 """""""""
@@ -49,6 +47,7 @@ form:
     z(r_i) = \frac{e^{-\frac{1}{2}(r_i - Q_1)^T Q_2^{-1}(r_i-Q_1)}}{z_0}
 
     z_0(Q_2) = \int_{-\infty}^{\infty}e^{-1\frac{1}{2}r^TQ^{-1}_2r}d^kr
+    :label: debias
 
 Zeroth Moment
 """""""""""""
@@ -59,45 +58,48 @@ With this assumption the calculation of :math:`R_0` becomes:
     R_0 = \frac{1}{W_0}\frac{Q_0}{z_0(Q_2)}\int_{-\infty}^{\infty}
           e^{-\frac{1}{2}(r-Q_1)^TQ_2^{-1}(r-Q_1)} e^{-\frac{1}{2}(r-C_1)^TC_2^{-1}
           (r-C_1)} d^kr
+    :label: zero_zero
 
 Using the Matrix cook book, we recognize the integral can be re-expressed as:
 
 .. math::
     R_0 = Q_0N\int_{-\infty}^{\infty}e^{-\frac{1}{2}(r-\alpha)^T\beta^-1
                                            (r-\alpha)}d^kr
+    :label: zero_one
 
 Where:
 
 .. math::
-
     N = \frac{e^{\frac{-1}{2}(Q_1 - C_1)^T(Q_2 + C_2)^{-1}(Q_1 - C_1)}}
              {\sqrt{\det(2\pi(Q_2 + C_2))}}
 
     \alpha = (Q_2^{-1} + C_2^{-1})^{-1}(Q_2^{-1}Q_1 + C_2^{-1}C_1)
 
     \beta = (Q_2^{-1} + C_2^{-1})^{-1}
+    :label: zero_two
 
 If we make the assumption that :math:`\beta_x\beta_y - \beta_{xy}^2 > 0` the
 above integral evaluates to:
 
 .. math::
-    R_0 = 2\pi Q_0 \det(\beta)N
+    R_0 = 2\pi Q_0 \sqrt{\det(\beta)}N
+    :label: zero_three
 
 First Moment
 """"""""""""
 Following the procedure for the zeroth moment, the first moment is simply:
 
 .. math::
-
     R_1 = 2\pi Q_0\det(\beta)N\alpha
+    :label: one_zero
 
 Second Moment
 """""""""""""
 Likewise the second moment is:
 
 .. math::
-
     R_2 = 2\pi Q_0\det(\beta)N[\beta + \alpha\alpha^T]
+    :label: two_zero
 
 .. _uncertanties-in-moments:
 
@@ -113,8 +115,8 @@ To calculate the uncertanties in the moments, we will express the transformation
 from pixel space to moment space as the following linear algebra equation,
 
 .. math::
-
     \vec{R} = A\vec{Z}
+    :label: pix2mom
 
 where :math:`\vec{R}` is the vector of moments, :math:`A` is a number of pixels
 by number of moments matrix of the coefficients in calculation moments, and
@@ -131,6 +133,7 @@ transformation:
 
 .. math::
     \Sigma_R = A\Sigma_ZA^T
+    :label: uncertanty2uncertanty
 
 Likelihood of Moments
 ---------------------
@@ -143,6 +146,7 @@ following way:
 
 .. math::
     P(\vec{Q}|\vec{R}) \propto P(\vec{R}|\vec{Q})*P(\vec{Q})
+    :label: likelyhoodMoment
 
 We can then determine the maximumly probable moments, :math:`\vec{Q}` by finding
 the arguments of :math:`\vec{Q}` that maximize the likelyhood of the right hand
@@ -160,6 +164,7 @@ random variable distributed about a function of the vector :math:`\vec{Q}`:
 .. math::
     P(\vec{R}|\vec{Q}) = \frac{1}{a}e^{\frac{-1}{2}(\vec{R}-\vec{f(\vec{Q})})^T
                                        \Sigma_R^{-1}(\vec{R}-\vec{f(\vec{Q})})}
+    :label: probOfMoments
 
 In this equation :math:`a` is the normalization constant for a Gaussian and is
 does not contribute to in finding the maximum likelyhood. :math:`\vec{R}` is
@@ -167,6 +172,7 @@ the vector of moments measured from the image,
 
 .. math::
     \vec{R} = <R_0, R_{1x}, R_{1y}, R_{2x}, R_{2y}, R_{2xy}>
+    :label: momentsVec
 
 The mean of the Gaussian is a vector of functions where each component
 is the expression used to calcuate the corresponding weighted moment given
@@ -188,9 +194,11 @@ measured. We can express a single prior by making it a linear combination of
 both types weighted by the probability of the object being either type:
 
 .. math::
-    P(\vec{Q}) = P(\vec{Q})_{gal}[1-P(*)] + P(\vec{Q})_{star}P(*)
+    P(\vec{Q}) = P(\vec{Q}|Q_0)_{gal}[1-P(*|Q_0)] + P(\vec{Q|Q_0})_{star}P(*|Q_0)
+    :label: prior
 
-where :math:`P(*)` is the probability of an object being a star. This
+where :math:`P(*|Q_0)` is the probability of an object being a star, and
+:math:`Q_0` is the zeroth moment, aka the flux of an object. This
 probabiliy can be tuned to different areas of the sky, and is most likely to
 be a funciton of flux. At this point we will not specify a specific form.
 
